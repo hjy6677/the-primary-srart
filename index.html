@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1e2b25">
+  <meta name="description" content="时序：把待办排成看得见的时间轴，按日、周、月、年整理，拖入完成栏归档，并可在手机与电脑间自动同步。">
+  <title>时序 · 时间轴待办</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231e2b25'/%3E%3Cpath d='M17 23h20M17 32h30M17 41h13' stroke='%23f3ecdd' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='44' cy='23' r='4' fill='%23d8ae67'/%3E%3C/svg%3E">
+  <link rel="manifest" href="data:application/manifest+json,%7B%22id%22%3A%22%2F%22%2C%22name%22%3A%22%E6%97%B6%E5%BA%8F%20%C2%B7%20%E6%97%B6%E9%97%B4%E8%BD%B4%E5%BE%85%E5%8A%9E%22%2C%22short_name%22%3A%22%E6%97%B6%E5%BA%8F%22%2C%22description%22%3A%22%E6%8A%8A%E5%BE%85%E5%8A%9E%E6%8E%92%E6%88%90%E7%9C%8B%E5%BE%97%E8%A7%81%E7%9A%84%E6%97%B6%E9%97%B4%E8%BD%B4%EF%BC%8C%E6%94%AF%E6%8C%81%E6%97%A5%20%2F%20%E5%91%A8%20%2F%20%E6%9C%88%20%2F%20%E5%B9%B4%E8%8A%82%E7%82%B9%E5%92%8C%E6%89%8B%E6%9C%BA%E3%80%81%E7%94%B5%E8%84%91%E5%90%8C%E6%AD%A5%E3%80%82%22%2C%22lang%22%3A%22zh-CN%22%2C%22dir%22%3A%22ltr%22%2C%22start_url%22%3A%22%2F%22%2C%22scope%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22display_override%22%3A%5B%22standalone%22%2C%22minimal-ui%22%5D%2C%22background_color%22%3A%22%23f4f0e7%22%2C%22theme_color%22%3A%22%231d2a24%22%2C%22categories%22%3A%5B%22productivity%22%2C%22lifestyle%22%5D%2C%22prefer_related_applications%22%3Afalse%2C%22icons%22%3A%5B%7B%22src%22%3A%22%2Ficons%2Ficon-192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%22%7D%2C%7B%22src%22%3A%22%2Ficons%2Ficon-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22any%22%7D%2C%7B%22src%22%3A%22%2Ficons%2Ficon-maskable-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%2C%22purpose%22%3A%22maskable%22%7D%5D%7D">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="时序">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="时序">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4L19 7"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 8H5V4"/><path d="M5.6 8.4A8 8 0 1 1 4 14"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="i-local" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4M6 5h9l-1.5 4L18 13H6"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="17" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="1.3" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3c.6 4.5 2.9 6.8 7 7.5-4.1.7-6.4 3-7 7.5-.6-4.5-2.9-6.8-7-7.5 4.1-.7 6.4-3 7-7.5Z"/><path d="M19 16c.2 1.5 1 2.3 2.5 2.5-1.5.2-2.3 1-2.5 2.5-.2-1.5-1-2.3-2.5-2.5 1.5-.2 2.3-1 2.5-2.5Z"/></symbol>
+      <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18H6a4 4 0 0 1-.7-7.94A6.5 6.5 0 0 1 18 9.5h.3a4.25 4.25 0 0 1 .2 8.5H16"/><path d="M12 12v7M9.5 16.5 12 19l2.5-2.5"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 0-1.6 5.3"/></symbol>
+      <symbol id="i-install" viewBox="0 0 24 24"><path d="M12 3v11M8 10l4 4 4-4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1.1 1-1.1 1.8M12 17h.01"/></symbol>
+      <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h5M11 17h5"/></symbol>
+      <symbol id="i-unlink" viewBox="0 0 24 24"><path d="m9 15-1.5 1.5a3.5 3.5 0 0 1-5-5L5 9M15 9l1.5-1.5a3.5 3.5 0 0 1 5 5L19 15M8 4l1 2M4 8l2 1M16 20l-1-2M20 16l-2-1"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="时间轴导航">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44">
+            <circle cx="22" cy="22" r="17.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".38"/>
+            <path d="M12 16h13M12 22h20M12 28h9" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+            <circle cx="30" cy="16" r="2.6" fill="#d8ae67"/>
+            <circle cx="16" cy="28" r="2.1" fill="none" stroke="#d8ae67" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <h1>时序</h1>
+          <p>TIMELINE&nbsp;·&nbsp;TO&nbsp;DO</p>
+        </div>
+        <button class="icon-btn sidebar-close" id="sidebarClose" type="button" aria-label="收起侧边栏">
+          <svg class="icon"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <p class="brand-note">把日子排成一条<br>看得见的线。</p>
+
+      <div class="sidebar-heading">
+        <span>我的时间轴</span>
+        <button class="icon-btn icon-btn-sm" id="newTimelineBtn" type="button" aria-label="新建时间轴" title="新建时间轴">
+          <svg class="icon"><use href="#i-plus"></use></svg>
+        </button>
+      </div>
+      <nav class="timeline-list" id="timelineList" aria-label="时间轴列表"></nav>
+      <button class="new-timeline-card" id="newTimelineBtn2" type="button">
+        <svg class="icon"><use href="#i-plus"></use></svg>
+        <span>新建时间轴</span>
+      </button>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="storage-status" id="storageStatus" title="数据保存在当前浏览器">
+        <span class="status-dot"></span>
+        <div>
+          <strong>本地自动保存</strong>
+          <span id="savedTime">准备就绪</span>
+        </div>
+      </div>
+      <button class="account-card" id="accountCard" type="button" aria-label="打开账号与同步">
+        <span class="avatar avatar-sidebar" id="accountAvatar">访</span>
+        <span class="account-copy">
+          <strong id="accountName">本机访客</strong>
+          <span id="accountSubtitle">本地空间 · 同步码迁移</span>
+        </span>
+        <svg class="icon account-chevron"><use href="#i-chevron-right"></use></svg>
+      </button>
+      <p class="sidebar-foot">LOCAL FIRST · 你的时间只属于你</p>
+    </aside>
+
+    <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="menuBtn" type="button" aria-label="打开侧边栏">
+          <svg class="icon"><use href="#i-menu"></use></svg>
+        </button>
+        <div class="title-block">
+          <div class="title-line">
+            <span class="timeline-dot" id="timelineDot" aria-hidden="true"></span>
+            <h2 id="timelineTitle">我的时序</h2>
+            <button class="icon-btn icon-btn-sm timeline-edit" id="editTimelineBtn" type="button" aria-label="编辑当前时间轴" title="编辑时间轴">
+              <svg class="icon"><use href="#i-more"></use></svg>
+            </button>
+          </div>
+          <p id="timelineNote">把重要的事，放到看得见的时间里。</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-ghost zones-btn" id="manageZonesBtn" type="button">
+            <svg class="icon"><use href="#i-sliders"></use></svg>
+            <span>管理区域</span>
+          </button>
+          <button class="btn btn-primary" id="addEventBtn" type="button">
+            <svg class="icon"><use href="#i-plus"></use></svg>
+            <span>新建事件</span>
+            <kbd>N</kbd>
+          </button>
+          <button class="avatar-btn" id="accountTop" type="button" aria-label="账号与同步">
+            <span class="avatar" id="accountTopAvatar">访</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="时间轴视图与日期控制">
+        <div class="segmented" id="viewSwitch" role="tablist" aria-label="时间节点切换">
+          <button type="button" data-view="day" role="tab">日</button>
+          <button type="button" data-view="week" role="tab">周</button>
+          <button type="button" data-view="month" role="tab">月</button>
+          <button type="button" data-view="year" role="tab">年</button>
+          <span class="segment-indicator" aria-hidden="true"></span>
+        </div>
+        <div class="range-control">
+          <button class="icon-btn range-arrow" id="prevRange" type="button" aria-label="上一段">
+            <svg class="icon"><use href="#i-chevron-left"></use></svg>
+          </button>
+          <div class="range-copy">
+            <strong id="rangeLabel">时间范围</strong>
+            <span id="rangeSub">每个节点 1 周</span>
+          </div>
+          <button class="icon-btn range-arrow" id="nextRange" type="button" aria-label="下一段">
+            <svg class="icon"><use href="#i-chevron-right"></use></svg>
+          </button>
+          <button class="btn btn-tiny" id="todayBtn" type="button">回到今天</button>
+        </div>
+        <div class="toolbar-right">
+          <div class="drag-tip" aria-hidden="true">
+            <svg class="icon"><use href="#i-move"></use></svg>
+            <span class="tip-desktop">拖到完成栏归档</span>
+            <span class="tip-touch">长按卡片拖起</span>
+          </div>
+          <button class="btn btn-ghost done-toggle" id="doneToggle" type="button" aria-controls="donePanel">
+            <svg class="icon"><use href="#i-check"></use></svg>
+            <span>完成栏</span>
+            <span class="badge" id="doneCountBadge">0</span>
+          </button>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="board" aria-label="时间轴看板">
+          <div class="board-scroller" id="boardScroller" tabindex="0"></div>
+          <div class="board-empty" id="boardEmpty" hidden>
+            <div class="empty-illustration" aria-hidden="true">
+              <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="31"/><path d="M25 41h18M25 49h28M25 33h12"/><circle cx="56" cy="33" r="5"/></svg>
+            </div>
+            <h3>这段时间还没有安排</h3>
+            <p>新建一个事件，或切换到其他时间节点看看。</p>
+            <button class="btn btn-primary" id="emptyAddBtn" type="button">
+              <svg class="icon"><use href="#i-plus"></use></svg>新建事件
+            </button>
+          </div>
+        </section>
+
+        <aside class="done-panel" id="donePanel" aria-label="完成栏">
+          <header class="done-head">
+            <div class="done-head-copy">
+              <span class="done-icon" aria-hidden="true">
+                <svg class="icon"><use href="#i-check"></use></svg>
+              </span>
+              <div>
+                <h3>完成栏</h3>
+                <p>拖回任意区域，可以撤销完成</p>
+              </div>
+            </div>
+            <button class="icon-btn done-close" id="doneClose" type="button" aria-label="关闭完成栏">
+              <svg class="icon"><use href="#i-close"></use></svg>
+            </button>
+          </header>
+
+          <div class="done-progress">
+            <div class="progress-copy">
+              <span id="progressLabel">今天还没有安排</span>
+              <strong id="progressPercent">0%</strong>
+            </div>
+            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar">
+              <span id="progressFill"></span>
+            </div>
+            <div class="progress-meta">
+              <span id="doneTotalLabel">已完成 0 项</span>
+              <span id="pendingTodayLabel">今日待办 0 项</span>
+            </div>
+          </div>
+
+          <div class="done-list" id="doneList"></div>
+
+          <footer class="done-foot">
+            <span class="done-foot-hint">
+              <svg class="icon"><use href="#i-grip"></use></svg>
+              拖回时间轴可恢复
+            </span>
+            <button class="text-btn danger-text" id="clearDoneBtn" type="button">清空已完成</button>
+          </footer>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="done-backdrop" id="doneBackdrop" hidden></div>
+
+  <div class="drag-hint" id="dragHint" hidden aria-hidden="true">
+    <svg class="icon"><use href="#i-move"></use></svg>
+    <span>松手，放入区域或完成栏</span>
+  </div>
+  <div class="drag-done-target" id="dragDoneTarget" data-drop="done" hidden aria-hidden="true">
+    <span class="drag-done-target-icon">
+      <svg class="icon"><use href="#i-check"></use></svg>
+    </span>
+    <span>拖到这里完成</span>
+  </div>
+  <div id="dragGhostLayer" class="drag-ghost-layer" aria-hidden="true"></div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-dialog" id="modalDialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+      <header class="modal-head">
+        <div>
+          <span class="modal-kicker" id="modalKicker">时序</span>
+          <h2 id="modalTitle">标题</h2>
+        </div>
+        <button class="icon-btn" id="modalClose" type="button" aria-label="关闭">
+          <svg class="icon"><use href="#i-close"></use></svg>
+        </button>
+      </header>
+      <div class="modal-body" id="modalBody"></div>
+      <footer class="modal-foot" id="modalFoot"></footer>
+    </div>
+  </div>
+
+  <div class="modal confirm-modal" id="confirmModal" hidden>
+    <div class="modal-backdrop" data-confirm-close></div>
+    <div class="modal-dialog confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage" tabindex="-1">
+      <div class="confirm-body">
+        <span class="confirm-mark" id="confirmMark" aria-hidden="true">
+          <svg class="icon"><use href="#i-flag"></use></svg>
+        </span>
+        <h2 id="confirmTitle">确认操作</h2>
+        <p id="confirmMessage">此操作无法撤销。</p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" id="confirmCancel" type="button">取消</button>
+        <button class="btn btn-danger" id="confirmOk" type="button">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
