@@ -12,7 +12,7 @@
  */
 
 const CACHE_PREFIX = 'shixu-shell-';
-const CACHE_NAME = 'shixu-shell-v2';
+const CACHE_NAME = 'shixu-shell-v3';
 const SCOPE = self.registration.scope;
 const INDEX_URL = new URL('index.html', SCOPE).href;
 // 不把 manifest 放进预缓存：公网隧道可能把浏览器的 manifest 请求

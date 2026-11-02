@@ -124,6 +124,24 @@
     return toISO(new Date(date.getFullYear(), date.getMonth(), 1, 12));
   }
 
+  function endOfMonth(iso) {
+    const date = parseISO(iso);
+    return toISO(new Date(date.getFullYear(), date.getMonth() + 1, 0, 12));
+  }
+
+  function startOfYear(iso) {
+    return `${parseISO(iso).getFullYear()}-01-01`;
+  }
+
+  function endOfYear(iso) {
+    return `${parseISO(iso).getFullYear()}-12-31`;
+  }
+
+  function daysInclusive(startISO, endISO) {
+    if (!isValidISODate(startISO) || !isValidISODate(endISO) || endISO < startISO) return 0;
+    return Math.round((parseISO(endISO) - parseISO(startISO)) / 86400000) + 1;
+  }
+
   function weekdayIndex(iso) {
     return (parseISO(iso).getDay() + 6) % 7;
   }
@@ -178,6 +196,102 @@
       return `${start.getMonth() + 1}月${start.getDate()}日 – ${end.getDate()}日`;
     }
     return `${start.getMonth() + 1}月${start.getDate()}日 – ${end.getMonth() + 1}月${end.getDate()}日`;
+  }
+
+  function eventStart(event) {
+    return isValidISODate(event?.startDate) ? event.startDate : (isValidISODate(event?.date) ? event.date : todayISO());
+  }
+
+  function eventEnd(event) {
+    const start = eventStart(event);
+    return isValidISODate(event?.endDate) && event.endDate >= start ? event.endDate : start;
+  }
+
+  function isSpanningEvent(event) {
+    return eventStart(event) !== eventEnd(event);
+  }
+
+  function eventDateStats(event, rangeStart, rangeEnd) {
+    const start = eventStart(event) > rangeStart ? eventStart(event) : rangeStart;
+    const end = eventEnd(event) < rangeEnd ? eventEnd(event) : rangeEnd;
+    if (start > end) return null;
+    const total = daysInclusive(start, end);
+    let completed = 0;
+    for (const date of Object.keys(event.completedDates || {})) {
+      if (date >= start && date <= end) completed += 1;
+    }
+    return { start, end, total, completed, remaining: Math.max(0, total - completed) };
+  }
+
+  function eventHasRemaining(event) {
+    return Boolean(eventDateStats(event, eventStart(event), eventEnd(event))?.remaining);
+  }
+
+  function isEventDateCompleted(event, date) {
+    return Boolean(event.completedDates && event.completedDates[date]);
+  }
+
+  function syncEventCompletedMeta(event) {
+    const start = eventStart(event);
+    const end = eventEnd(event);
+    event.startDate = start;
+    event.endDate = end;
+    event.date = start;
+    const stats = eventDateStats(event, start, end);
+    event.done = Boolean(stats && stats.total > 0 && stats.remaining === 0);
+    const completedTimes = Object.values(event.completedDates || {}).filter((value) => {
+      const time = new Date(value).getTime();
+      return Number.isFinite(time);
+    }).sort();
+    event.completedAt = event.done ? (completedTimes[completedTimes.length - 1] || null) : null;
+  }
+
+  function formatEventRange(event) {
+    const start = eventStart(event);
+    const end = eventEnd(event);
+    if (start === end) return formatMonthDay(start);
+    if (start === startOfYear(start) && end === endOfYear(start)) {
+      return `${parseISO(start).getFullYear()}年全年`;
+    }
+    if (start === startOfMonth(start) && end === endOfMonth(start)) {
+      return `${parseISO(start).getFullYear()}年${parseISO(start).getMonth() + 1}月`;
+    }
+    if (start === startOfWeek(start) && end === addDays(start, 6)) {
+      return formatWeekSpan(start, end);
+    }
+    const startDate = parseISO(start);
+    const endDate = parseISO(end);
+    if (startDate.getFullYear() === endDate.getFullYear() && startDate.getMonth() === endDate.getMonth()) {
+      return `${startDate.getMonth() + 1}月${startDate.getDate()}日–${endDate.getDate()}日`;
+    }
+    if (startDate.getFullYear() === endDate.getFullYear()) {
+      return `${startDate.getMonth() + 1}月${startDate.getDate()}日–${endDate.getMonth() + 1}月${endDate.getDate()}日`;
+    }
+    return `${startDate.getFullYear()}年${startDate.getMonth() + 1}月${startDate.getDate()}日–${endDate.getFullYear()}年${endDate.getMonth() + 1}月${endDate.getDate()}日`;
+  }
+
+  function rangeForScope(scope, anchorISO) {
+    const anchor = isValidISODate(anchorISO) ? anchorISO : todayISO();
+    if (scope === 'week') {
+      const start = startOfWeek(anchor);
+      return { start, end: addDays(start, 6) };
+    }
+    if (scope === 'month') {
+      return { start: startOfMonth(anchor), end: endOfMonth(anchor) };
+    }
+    if (scope === 'year') {
+      return { start: startOfYear(anchor), end: endOfYear(anchor) };
+    }
+    return { start: anchor, end: anchor };
+  }
+
+  function detectRangeScope(startISO, endISO) {
+    if (startISO === endISO) return 'day';
+    for (const scope of ['week', 'month', 'year']) {
+      const range = rangeForScope(scope, startISO);
+      if (range.start === startISO && range.end === endISO) return scope;
+    }
+    return 'custom';
   }
 
   function formatDisplayRange(view, periods) {
@@ -575,28 +689,46 @@
     if (!raw || typeof raw !== 'object') return null;
     const title = normalizeText(raw.title, 90);
     if (!title) return null;
-    const date = isValidISODate(raw.date) ? raw.date : todayISO();
+    const legacyDate = isValidISODate(raw.date) ? raw.date : todayISO();
+    const startDate = isValidISODate(raw.startDate) ? raw.startDate : legacyDate;
+    let endDate = isValidISODate(raw.endDate) ? raw.endDate : startDate;
+    if (endDate < startDate) endDate = startDate;
     const zoneIds = new Set(zones.map((zone) => zone.id));
     const zoneId = zoneIds.has(String(raw.zoneId)) ? String(raw.zoneId) : zones[0].id;
-    const done = Boolean(raw.done);
-    let completedAt = raw.completedAt;
-    if (done && (!completedAt || Number.isNaN(new Date(completedAt).getTime()))) {
-      completedAt = new Date().toISOString();
+
+    const completedDates = {};
+    if (raw.completedDates && typeof raw.completedDates === 'object' && !Array.isArray(raw.completedDates)) {
+      for (const [date, value] of Object.entries(raw.completedDates)) {
+        if (!isValidISODate(date) || date < startDate || date > endDate) continue;
+        const time = new Date(value).getTime();
+        completedDates[date] = Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
+      }
     }
-    if (!done) completedAt = null;
+    if (raw.done && isValidISODate(legacyDate) && legacyDate >= startDate && legacyDate <= endDate) {
+      if (!completedDates[legacyDate]) {
+        const time = new Date(raw.completedAt).getTime();
+        completedDates[legacyDate] = Number.isFinite(time) ? new Date(time).toISOString() : new Date().toISOString();
+      }
+    }
+
     const priority = PRIORITIES.includes(raw.priority) ? raw.priority : 'normal';
-    return {
+    const event = {
       id: normalizeText(raw.id, 80) || uid('e'),
       title,
       note: normalizeText(raw.note, 500),
-      date,
+      date: startDate,
+      startDate,
+      endDate,
       zoneId,
       priority,
-      done,
-      completedAt,
+      done: false,
+      completedDates,
+      completedAt: null,
       createdAt: Number.isNaN(new Date(raw.createdAt).getTime()) ? new Date().toISOString() : raw.createdAt,
       updatedAt: Number.isNaN(new Date(raw.updatedAt).getTime()) ? new Date().toISOString() : raw.updatedAt
     };
+    syncEventCompletedMeta(event);
+    return event;
   }
 
   function normalizeTimeline(raw, index) {
@@ -650,7 +782,7 @@
   function loadWorkspaceFor(accountId) {
     const raw = readJSON(STORAGE.workspace(accountId), null);
     if (raw) return normalizeWorkspace(raw);
-    return accountId === 'guest' ? createSeedWorkspace() : createDefaultWorkspace();
+    return normalizeWorkspace(accountId === 'guest' ? createSeedWorkspace() : createDefaultWorkspace());
   }
 
   function loadAccounts() {
@@ -826,14 +958,22 @@
     });
   }
 
-  function getDoneEvents(timeline) {
-    return timeline.events
-      .filter((event) => event.done)
-      .sort((first, second) => {
-        const firstTime = new Date(first.completedAt || first.updatedAt || 0).getTime();
-        const secondTime = new Date(second.completedAt || second.updatedAt || 0).getTime();
-        return secondTime - firstTime;
-      });
+  function getDoneOccurrences(timeline) {
+    const occurrences = [];
+    for (const event of timeline.events) {
+      const start = eventStart(event);
+      const end = eventEnd(event);
+      for (const [date, completedAt] of Object.entries(event.completedDates || {})) {
+        if (date < start || date > end) continue;
+        occurrences.push({ event, date, completedAt: completedAt || event.updatedAt });
+      }
+    }
+    return occurrences.sort((first, second) => {
+      const firstTime = new Date(first.completedAt || 0).getTime();
+      const secondTime = new Date(second.completedAt || 0).getTime();
+      if (firstTime !== secondTime) return secondTime - firstTime;
+      return second.date.localeCompare(first.date);
+    });
   }
 
   /* =========================================================
@@ -859,7 +999,7 @@
     if (!timeline) return;
 
     el.timelineList.innerHTML = state.timelines.map((item) => {
-      const pending = item.events.filter((event) => !event.done).length;
+      const pending = item.events.filter((event) => eventHasRemaining(event)).length;
       const active = item.id === state.activeTimelineId;
       return `
         <button class="timeline-item${active ? ' is-active' : ''}" type="button"
@@ -906,7 +1046,7 @@
     el.rangeSub.textContent = `${config.count} ${config.unit} · 每个节点 1 ${config.unit}`;
 
     const timeline = getTimeline();
-    const doneCount = timeline ? getDoneEvents(timeline).length : 0;
+    const doneCount = timeline ? getDoneOccurrences(timeline).length : 0;
     el.doneCountBadge.textContent = String(doneCount);
   }
 
@@ -933,22 +1073,28 @@
     });
 
     const columns = currentPeriods.map((period) => {
-      const periodEvents = timeline.events.filter(
-        (event) => !event.done && isInRange(event.date, period.startISO, period.endISO)
-      );
-      const count = periodEvents.length;
+      const periodEntries = timeline.events.map((event) => {
+        const stats = eventDateStats(event, period.startISO, period.endISO);
+        return stats && stats.remaining > 0 ? { event, stats } : null;
+      }).filter(Boolean);
+      const progressById = new Map(periodEntries.map((entry) => [entry.event.id, entry.stats]));
+      const count = periodEntries.length;
 
       const zones = timeline.zones.map((zone) => {
-        const zoneEvents = sortZoneEvents(periodEvents.filter((event) => event.zoneId === zone.id));
+        const zoneEvents = sortZoneEvents(periodEntries
+          .filter((entry) => entry.event.zoneId === zone.id)
+          .map((entry) => entry.event));
         const expandKey = `${period.key}::${zone.id}`;
         const expanded = Boolean(ui.expanded[expandKey]);
         const visibleEvents = expanded ? zoneEvents : zoneEvents.slice(0, MAX_VISIBLE_EVENTS);
         const hiddenCount = zoneEvents.length - visibleEvents.length;
         const zoneColor = safeColor(zone.color);
+        const addContext = `data-zone-id="${esc(zone.id)}" data-date="${esc(period.defaultDate)}"
+            data-period-start="${esc(period.startISO)}" data-period-end="${esc(period.endISO)}"
+            data-period-view="${esc(ui.view)}" data-period-label="${esc(period.title)}"`;
         const addButton = `
           <button class="zone-add-row" type="button" data-action="add-event"
-            data-zone-id="${esc(zone.id)}" data-date="${esc(period.defaultDate)}"
-            data-period-label="${esc(period.title)}" aria-label="在${esc(zone.name)}区域添加事件">
+            ${addContext} aria-label="在${esc(zone.name)}区域添加事件">
             ${icon('plus')}<span>添加事件</span>
           </button>
         `;
@@ -962,14 +1108,13 @@
               <h4 class="zone-name">${esc(zone.name)}</h4>
               <span class="zone-count">${zoneEvents.length}</span>
               <button class="zone-add" type="button" data-action="add-event"
-                data-zone-id="${esc(zone.id)}" data-date="${esc(period.defaultDate)}"
-                data-period-label="${esc(period.title)}" aria-label="在${esc(zone.name)}区域添加事件"
+                ${addContext} aria-label="在${esc(zone.name)}区域添加事件"
                 title="添加事件">${icon('plus')}</button>
             </header>
             <div class="zone-events">
               ${zoneEvents.length === 0 ? `
                 <div class="zone-empty">拖动事件到这里，或点击 + 添加</div>
-              ` : visibleEvents.map((event) => eventCardHTML(event, zone)).join('')}
+              ` : visibleEvents.map((event) => eventCardHTML(event, zone, period, progressById.get(event.id))).join('')}
               ${zoneEvents.length > MAX_VISIBLE_EVENTS ? `
                 <button class="zone-more" type="button" data-action="expand" data-key="${esc(expandKey)}">
                   ${expanded ? '收起' : `还有 ${hiddenCount} 项`}
@@ -1025,14 +1170,26 @@
     });
   }
 
-  function eventCardHTML(event, zone) {
+  function eventCardHTML(event, zone, period, stats) {
     const zoneColor = safeColor(zone.color);
     const priority = PRIORITIES.includes(event.priority) ? event.priority : 'normal';
-    const showDate = ui.view !== 'day';
+    const spanning = isSpanningEvent(event);
+    const showDate = ui.view !== 'day' || spanning;
     const metaParts = [];
+    const progress = spanning && stats && ui.view !== 'day' ? stats : null;
+    const fullTotal = spanning ? daysInclusive(eventStart(event), eventEnd(event)) : 0;
+    const dayNumber = spanning && ui.view === 'day'
+      ? daysInclusive(eventStart(event), period.startISO)
+      : 0;
 
     if (showDate) {
-      metaParts.push(`<span class="event-date">${icon('calendar')}${formatMonthDay(event.date)}</span>`);
+      metaParts.push(`<span class="event-date">${icon('calendar')}${esc(formatEventRange(event))}</span>`);
+    }
+    if (progress) {
+      const percent = Math.round((progress.completed / progress.total) * 100);
+      metaParts.push(`<span class="event-progress"><span>${progress.completed}/${progress.total}</span><i><b style="width:${percent}%"></b></i></span>`);
+    } else if (spanning && ui.view === 'day') {
+      metaParts.push(`<span class="event-progress is-day"><span>第 ${dayNumber} 天 / ${fullTotal} 天</span></span>`);
     }
     if (priority === 'high') {
       metaParts.push('<span class="priority-chip">优先</span>');
@@ -1040,17 +1197,21 @@
       metaParts.push('<span class="priority-chip low">不急</span>');
     }
 
+    const dragHint = spanning ? '跨节点事件 · 点击编辑范围' : '点击编辑 · 拖动调整';
     return `
-      <article class="event-card" data-event-id="${esc(event.id)}" data-zone-id="${esc(zone.id)}"
-        data-source="board" data-priority="${priority}" tabindex="0"
+      <article class="event-card${spanning ? ' is-spanning' : ''}" data-event-id="${esc(event.id)}" data-zone-id="${esc(zone.id)}"
+        data-date="${ui.view === 'day' ? esc(period.startISO) : ''}"
+        data-source="board" data-priority="${priority}" ${spanning ? 'data-no-drag="1"' : ''} tabindex="0"
         style="--zone-color:${zoneColor}"
-        aria-label="${esc(event.title)}，点击编辑，可拖入完成栏"
-        title="点击编辑 · 拖动调整">
+        aria-label="${esc(event.title)}，点击编辑${spanning ? '，跨节点事件' : '，可拖入完成栏'}"
+        title="${dragHint}">
         <div class="event-title">${esc(event.title)}</div>
         ${event.note ? `<div class="event-note">${esc(event.note)}</div>` : ''}
         ${metaParts.length ? `<div class="event-meta">${metaParts.join('')}</div>` : ''}
-        <button class="event-check" type="button" data-action="complete"
-          aria-label="完成「${esc(event.title)}」" title="标记完成">${icon('check')}</button>
+        ${ui.view === 'day' ? `
+          <button class="event-check" type="button" data-action="complete"
+            aria-label="完成「${esc(event.title)}」在 ${esc(period.title)}" title="完成这一天">${icon('check')}</button>
+        ` : ''}
       </article>
     `;
   }
@@ -1058,46 +1219,48 @@
   function renderDone() {
     const timeline = getTimeline();
     if (!timeline) return;
-    const doneEvents = getDoneEvents(timeline);
+    const doneOccurrences = getDoneOccurrences(timeline);
     const today = todayISO();
-    const todayEvents = timeline.events.filter((event) => event.date === today);
-    const todayDoneCount = todayEvents.filter((event) => event.done).length;
-    const todayPendingCount = todayEvents.filter((event) => !event.done).length;
-    const todayTotal = todayDoneCount + todayPendingCount;
+    const todayEvents = timeline.events.filter((event) => today >= eventStart(event) && today <= eventEnd(event));
+    const todayDoneCount = todayEvents.filter((event) => isEventDateCompleted(event, today)).length;
+    const todayPendingCount = todayEvents.length - todayDoneCount;
+    const todayTotal = todayEvents.length;
     const percent = todayTotal ? Math.round((todayDoneCount / todayTotal) * 100) : 0;
 
     el.progressLabel.textContent = todayTotal ? `今日完成 ${todayDoneCount} / ${todayTotal}` : '今天还没有安排';
     el.progressPercent.textContent = `${percent}%`;
     el.progressFill.style.width = `${percent}%`;
     el.progressBar.setAttribute('aria-valuenow', String(percent));
-    el.doneTotalLabel.textContent = `已完成 ${doneEvents.length} 项`;
+    el.doneTotalLabel.textContent = `已完成 ${doneOccurrences.length} 项`;
     el.pendingTodayLabel.textContent = `今日待办 ${todayPendingCount} 项`;
-    el.doneCountBadge.textContent = String(doneEvents.length);
-    el.clearDoneBtn.disabled = doneEvents.length === 0;
+    el.doneCountBadge.textContent = String(doneOccurrences.length);
+    el.clearDoneBtn.disabled = doneOccurrences.length === 0;
 
-    if (!doneEvents.length) {
+    if (!doneOccurrences.length) {
       el.doneList.innerHTML = `
         <div class="done-empty">
           <div class="done-empty-mark" aria-hidden="true">${icon('check')}</div>
           <h4>完成栏还是空的</h4>
-          <p>把已完成的事件拖到这里，或者点击卡片右上角的圆圈。它会安静地留在这里。</p>
+          <p>在日视图点击卡片右上角的圆圈，或者把单日事件拖到这里。跨节点事件会按天记录完成。</p>
         </div>
       `;
       return;
     }
 
-    el.doneList.innerHTML = doneEvents.map((event) => {
+    el.doneList.innerHTML = doneOccurrences.map(({ event, date, completedAt }) => {
       const zone = timeline.zones.find((item) => item.id === event.zoneId) || { name: '未分类' };
+      const spanning = isSpanningEvent(event);
       return `
-        <article class="done-card" data-event-id="${esc(event.id)}" data-source="done" tabindex="0"
-          aria-label="${esc(event.title)}，已完成，可拖回时间轴" title="点击查看 · 拖回时间轴可撤销完成">
+        <article class="done-card${spanning ? ' is-spanning' : ''}" data-event-id="${esc(event.id)}" data-date="${esc(date)}"
+          data-source="done" ${spanning ? 'data-no-drag="1"' : ''} tabindex="0"
+          aria-label="${esc(event.title)}，${esc(formatMonthDay(date))}已完成" title="点击查看${spanning ? '' : ' · 拖回时间轴可撤销完成'}">
           <span class="done-check" aria-hidden="true">${icon('check')}</span>
           <div class="done-card-copy">
             <div class="done-title">${esc(event.title)}</div>
-            <div class="done-meta">${esc(zone.name)} · ${formatMonthDay(event.date)} · ${completionLabel(event.completedAt)} 完成</div>
+            <div class="done-meta">${esc(zone.name)} · ${formatMonthDay(date)} · ${completionLabel(completedAt)} 完成${spanning ? ` · 跨节点（${esc(formatEventRange(event))}）` : ''}</div>
           </div>
           <button class="done-undo" type="button" data-action="undo"
-            aria-label="撤销完成「${esc(event.title)}」" title="撤销完成">${icon('undo')}</button>
+            aria-label="撤销完成「${esc(event.title)}」在${esc(formatMonthDay(date))}" title="撤销这一天的完成">${icon('undo')}</button>
         </article>
       `;
     }).join('');
@@ -1258,34 +1421,41 @@
     return currentPeriods.some((period) => isInRange(date, period.startISO, period.endISO));
   }
 
-  function completeEvent(eventId, options = {}) {
+  function completeEvent(eventId, date, options = {}) {
     const event = findEventById(eventId);
-    if (!event || event.done) return;
-    event.done = true;
-    event.completedAt = new Date().toISOString();
-    event.updatedAt = event.completedAt;
+    if (!event) return;
+    const targetDate = isValidISODate(date) ? date : eventStart(event);
+    if (targetDate < eventStart(event) || targetDate > eventEnd(event)) return;
+    if (isEventDateCompleted(event, targetDate)) return;
+    event.completedDates = event.completedDates || {};
+    event.completedDates[targetDate] = new Date().toISOString();
+    event.updatedAt = new Date().toISOString();
+    syncEventCompletedMeta(event);
     saveWorkspace();
     renderAll();
     if (!options.silent) {
-      showToast(`「${event.title}」已移入完成栏`, {
+      const dayLabel = isSpanningEvent(event) ? ` ${formatMonthDay(targetDate)}` : '';
+      showToast(`「${event.title}」${dayLabel} 已完成`, {
         icon: 'check',
         action: {
           label: '撤销',
-          onClick: () => undoComplete(eventId)
+          onClick: () => undoComplete(eventId, targetDate)
         }
       });
     }
   }
 
-  function undoComplete(eventId) {
+  function undoComplete(eventId, date) {
     const event = findEventById(eventId);
-    if (!event || !event.done) return;
-    event.done = false;
-    event.completedAt = null;
+    if (!event || !event.completedDates) return;
+    const targetDate = isValidISODate(date) ? date : null;
+    if (!targetDate || !event.completedDates[targetDate]) return;
+    delete event.completedDates[targetDate];
     event.updatedAt = new Date().toISOString();
+    syncEventCompletedMeta(event);
     saveWorkspace();
     renderAll();
-    showToast('已撤销完成，事件回到时间轴。', { icon: 'undo' });
+    showToast('已撤销这一天的完成。', { icon: 'undo' });
   }
 
   function restoreEventSnapshot(eventId, snapshot) {
@@ -1305,20 +1475,30 @@
     const zone = timeline.zones.find((item) => item.id === zoneId);
     if (!event || !zone) return;
 
-    const snapshot = {
+    if (isSpanningEvent(event)) {
+      showToast('跨节点事件不能拖动改期，请点击卡片编辑覆盖范围。', { icon: 'flag' });
+      return;
+    }
+
+    const snapshot = deepClone({
       zoneId: event.zoneId,
+      startDate: eventStart(event),
+      endDate: eventEnd(event),
       date: event.date,
+      completedDates: event.completedDates || {},
       done: event.done,
       completedAt: event.completedAt
-    };
+    });
 
-    if (event.zoneId === zone.id && event.date === date && !event.done) return;
+    if (event.zoneId === zone.id && eventStart(event) === date && !event.completedDates?.[date]) return;
 
     event.zoneId = zone.id;
+    event.startDate = date;
+    event.endDate = date;
     event.date = date;
-    event.done = false;
-    event.completedAt = null;
+    event.completedDates = {};
     event.updatedAt = new Date().toISOString();
+    syncEventCompletedMeta(event);
     saveWorkspace();
     renderAll();
 
@@ -1377,7 +1557,14 @@
       || timeline.zones.find((zone) => zone.id === existing?.zoneId)
       || timeline.zones[0];
     const selectedZoneId = existing?.zoneId || defaultZone.id;
-    const selectedDate = existing?.date || (isValidISODate(context.date) ? context.date : (currentPeriods[0]?.defaultDate || todayISO()));
+    const fallbackStart = isValidISODate(context.startDate)
+      ? context.startDate
+      : (isValidISODate(context.date) ? context.date : (currentPeriods[0]?.defaultDate || todayISO()));
+    const selectedStart = existing ? eventStart(existing) : fallbackStart;
+    const selectedEnd = existing ? eventEnd(existing) : (isValidISODate(context.endDate) ? context.endDate : selectedStart);
+    let selectedScope = existing
+      ? detectRangeScope(selectedStart, selectedEnd)
+      : (['day', 'week', 'month', 'year'].includes(context.view) ? context.view : 'day');
     let selectedPriority = existing?.priority || 'normal';
 
     const zoneOptions = timeline.zones.map((zone) =>
@@ -1409,15 +1596,30 @@
           <label class="field-label" for="eventNote"><span>备注</span><em>可选</em></label>
           <textarea id="eventNote" maxlength="400" rows="3" placeholder="补充一些细节，让未来的自己看得懂。">${esc(existing?.note || '')}</textarea>
         </div>
+        <div class="field">
+          <span class="field-label"><span>覆盖范围</span><em>事件会出现在包含这些日期的节点</em></span>
+          <div class="range-picker" id="rangePicker">
+            <button type="button" class="range-chip" data-range="day">仅此日</button>
+            <button type="button" class="range-chip" data-range="week">整周</button>
+            <button type="button" class="range-chip" data-range="month">整月</button>
+            <button type="button" class="range-chip" data-range="year">全年</button>
+            <button type="button" class="range-chip" data-range="custom">自定义</button>
+          </div>
+        </div>
         <div class="field-row">
           <div class="field">
-            <label class="field-label" for="eventDate"><span>日期</span><em>落在哪个节点</em></label>
-            <input id="eventDate" type="date" value="${esc(selectedDate)}" required>
+            <label class="field-label" for="eventStartDate"><span>开始日期</span><em>必填</em></label>
+            <input id="eventStartDate" type="date" value="${esc(selectedStart)}" required>
           </div>
           <div class="field">
-            <label class="field-label" for="eventZone"><span>区域</span><em>可自定义</em></label>
-            <select id="eventZone">${zoneOptions}</select>
+            <label class="field-label" for="eventEndDate"><span>结束日期</span><em>同一天可留空</em></label>
+            <input id="eventEndDate" type="date" value="${esc(selectedEnd)}">
           </div>
+        </div>
+        <p class="range-summary" id="rangeSummary"></p>
+        <div class="field">
+          <label class="field-label" for="eventZone"><span>区域</span><em>可自定义</em></label>
+          <select id="eventZone">${zoneOptions}</select>
         </div>
         <div class="field">
           <span class="field-label"><span>优先级</span><em>仅作视觉提醒</em></span>
@@ -1436,17 +1638,47 @@
         const form = $('#eventForm');
         const titleInput = $('#eventTitle');
         const noteInput = $('#eventNote');
-        const dateInput = $('#eventDate');
+        const startInput = $('#eventStartDate');
+        const endInput = $('#eventEndDate');
+        const rangePicker = $('#rangePicker');
+        const rangeSummary = $('#rangeSummary');
         const zoneSelect = $('#eventZone');
         const errorElement = $('#eventError');
         const contextElement = $('#eventContext');
         const deleteButton = $('#deleteEventBtn');
 
+        const readRange = () => {
+          const start = isValidISODate(startInput.value) ? startInput.value : selectedStart;
+          const end = isValidISODate(endInput.value) ? endInput.value : start;
+          return { start, end };
+        };
+
+        const updateRangeUI = () => {
+          const { start, end } = readRange();
+          if (selectedScope !== 'custom') selectedScope = detectRangeScope(start, end);
+          $$('.range-chip', rangePicker).forEach((button) => {
+            const active = button.dataset.range === selectedScope;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+          const total = daysInclusive(start, end);
+          rangeSummary.textContent = total > 0
+            ? `覆盖 ${total} 天 · ${formatMonthDay(start)}${start === end ? '' : ` – ${formatMonthDay(end)}`}`
+            : '结束日期不能早于开始日期';
+        };
+
         const updateContext = () => {
           const zone = timeline.zones.find((item) => item.id === zoneSelect.value) || timeline.zones[0];
-          const date = isValidISODate(dateInput.value) ? dateInput.value : selectedDate;
-          const doneHint = existing?.done ? ' · 已完成事件' : '';
-          contextElement.innerHTML = `${icon('spark')}<span>保存到 <strong>${esc(zone.name)}</strong> 区域 · ${formatMonthDay(date)}${doneHint}</span>`;
+          const { start, end } = readRange();
+          const completedCount = existing?.completedDates ? Object.keys(existing.completedDates).length : 0;
+          const doneHint = completedCount ? ` · 已逐日完成 ${completedCount} 天` : '';
+          const range = start === end ? formatMonthDay(start) : `${formatMonthDay(start)} – ${formatMonthDay(end)}`;
+          contextElement.innerHTML = `${icon('spark')}<span>保存到 <strong>${esc(zone.name)}</strong> 区域 · ${range}${doneHint}</span>`;
+        };
+
+        const refreshRange = () => {
+          updateRangeUI();
+          updateContext();
         };
 
         $$('.priority-option', form).forEach((button) => {
@@ -1460,15 +1692,40 @@
           });
         });
 
-        dateInput.addEventListener('change', updateContext);
+        rangePicker.addEventListener('click', (event) => {
+          const button = event.target.closest('[data-range]');
+          if (!button) return;
+          const scope = button.dataset.range;
+          if (scope === 'custom') {
+            selectedScope = 'custom';
+            updateRangeUI();
+            startInput.focus();
+            return;
+          }
+          const range = rangeForScope(scope, startInput.value || selectedStart);
+          startInput.value = range.start;
+          endInput.value = range.end;
+          refreshRange();
+        });
+
+        startInput.addEventListener('change', () => {
+          selectedScope = 'custom';
+          if (!endInput.value || endInput.value < startInput.value) endInput.value = startInput.value;
+          refreshRange();
+        });
+        endInput.addEventListener('change', () => {
+          selectedScope = 'custom';
+          refreshRange();
+        });
         zoneSelect.addEventListener('change', updateContext);
-        updateContext();
+        refreshRange();
 
         form.addEventListener('submit', (event) => {
           event.preventDefault();
           errorElement.textContent = '';
           const title = titleInput.value.trim();
-          const date = dateInput.value;
+          const startDate = startInput.value;
+          const endDate = endInput.value || startInput.value;
           const zoneId = zoneSelect.value;
 
           if (!title) {
@@ -1476,9 +1733,14 @@
             titleInput.focus();
             return;
           }
-          if (!isValidISODate(date)) {
-            errorElement.textContent = '请选择一个有效的日期。';
-            dateInput.focus();
+          if (!isValidISODate(startDate) || !isValidISODate(endDate)) {
+            errorElement.textContent = '请选择有效的开始和结束日期。';
+            (isValidISODate(startDate) ? endInput : startInput).focus();
+            return;
+          }
+          if (endDate < startDate) {
+            errorElement.textContent = '结束日期不能早于开始日期。';
+            endInput.focus();
             return;
           }
           if (!timeline.zones.some((zone) => zone.id === zoneId)) {
@@ -1496,22 +1758,33 @@
               showToast('这个事件已经不存在了。', { icon: 'flag' });
               return;
             }
+            const completedDates = {};
+            for (const [date, completedAt] of Object.entries(target.completedDates || {})) {
+              if (date >= startDate && date <= endDate) completedDates[date] = completedAt;
+            }
             target.title = title;
             target.note = noteInput.value.trim();
-            target.date = date;
+            target.startDate = startDate;
+            target.endDate = endDate;
+            target.date = startDate;
+            target.completedDates = completedDates;
             target.zoneId = zoneId;
             target.priority = selectedPriority;
             target.updatedAt = now;
+            syncEventCompletedMeta(target);
             savedEvent = target;
           } else {
             savedEvent = {
               id: uid('e'),
               title,
               note: noteInput.value.trim(),
-              date,
+              date: startDate,
+              startDate,
+              endDate,
               zoneId,
               priority: selectedPriority,
               done: false,
+              completedDates: {},
               completedAt: null,
               createdAt: now,
               updatedAt: now
@@ -1523,10 +1796,10 @@
           closeModal();
           renderAll();
 
-          const action = isDateVisible(date) ? undefined : {
+          const action = isDateVisible(startDate) ? undefined : {
             label: '去看看',
             onClick: () => {
-              ui.anchor = date;
+              ui.anchor = startDate;
               persistUi();
               renderAll({ preserveBoardScroll: false });
             }
@@ -1628,7 +1901,7 @@
             沿用当前时间轴的区域设置
           </label>
         ` : `
-          <p class="field-note">这条时间轴目前有 ${timeline.zones.length} 个区域、${timeline.events.filter((event) => !event.done).length} 项待办。</p>
+          <p class="field-note">这条时间轴目前有 ${timeline.zones.length} 个区域、${timeline.events.filter((event) => eventHasRemaining(event)).length} 项待办。</p>
         `}
       </form>
     `;
@@ -3843,6 +4116,7 @@
 
     const card = event.target.closest('.event-card, .done-card');
     if (!card) return;
+    if (card.dataset.noDrag === '1') return;
     if (event.target.closest('button, a, input, textarea, select')) return;
 
     const rect = card.getBoundingClientRect();
@@ -3913,12 +4187,15 @@
       const targetDrop = target?.dataset.drop;
       const targetZoneId = target?.dataset.zoneId;
       const targetPeriodKey = target?.dataset.periodKey;
+      const sourceDate = dragState.sourceEl?.dataset.date || null;
 
       suppressClickUntil = performance.now() + 420;
       cleanupDrag();
 
       if (targetDrop === 'done' && sourceType !== 'done' && eventId) {
-        completeEvent(eventId);
+        const source = findEventById(eventId);
+        const dropDate = sourceDate || (source ? eventStart(source) : null);
+        if (source && !isSpanningEvent(source)) completeEvent(eventId, dropDate);
         return;
       }
 
@@ -4005,6 +4282,9 @@
     const fallbackPeriod = currentPeriod || currentPeriods[0];
     return {
       date: fallbackPeriod?.defaultDate || todayISO(),
+      startDate: fallbackPeriod?.startISO || todayISO(),
+      endDate: fallbackPeriod?.endISO || todayISO(),
+      view: ui.view,
       zoneId: timeline.zones[0]?.id,
       periodLabel: fallbackPeriod?.title || ''
     };
@@ -4060,13 +4340,16 @@
       const action = actionElement.dataset.action;
       if (action === 'complete') {
         const card = actionElement.closest('.event-card');
-        if (card) completeEvent(card.dataset.eventId);
+        if (card) completeEvent(card.dataset.eventId, card.dataset.date);
         return;
       }
       if (action === 'add-event') {
         openEventModal({
           context: {
             date: actionElement.dataset.date,
+            startDate: actionElement.dataset.periodStart,
+            endDate: actionElement.dataset.periodEnd,
+            view: actionElement.dataset.periodView,
             zoneId: actionElement.dataset.zoneId,
             periodLabel: actionElement.dataset.periodLabel
           }
@@ -4092,7 +4375,7 @@
     const undoButton = event.target.closest('[data-action="undo"]');
     if (undoButton) {
       const card = undoButton.closest('.done-card');
-      if (card) undoComplete(card.dataset.eventId);
+      if (card) undoComplete(card.dataset.eventId, card.dataset.date);
       return;
     }
     const card = event.target.closest('.done-card');
@@ -4237,27 +4520,35 @@
     el.clearDoneBtn.addEventListener('click', async () => {
       const timeline = getTimeline();
       if (!timeline) return;
-      const doneEvents = getDoneEvents(timeline);
-      if (!doneEvents.length) return;
+      const doneOccurrences = getDoneOccurrences(timeline);
+      if (!doneOccurrences.length) return;
 
       const confirmed = await confirmDialog({
-        title: '清空已完成事件？',
-        message: `完成栏里的 ${doneEvents.length} 项事件会被移除。操作后可以立刻撤销。`,
+        title: '清空完成记录？',
+        message: `完成栏里的 ${doneOccurrences.length} 条完成记录会被清除。跨节点事件本身会保留，单日事件会被移除。操作后可以立刻撤销。`,
         confirmText: '清空完成栏'
       });
       if (!confirmed) return;
 
-      timeline.events = timeline.events.filter((event) => !event.done);
+      const snapshot = deepClone(timeline.events);
+      timeline.events = timeline.events.filter((event) => {
+        const hasCompleted = Object.keys(event.completedDates || {}).length > 0;
+        if (daysInclusive(eventStart(event), eventEnd(event)) <= 1) return !hasCompleted;
+        event.completedDates = {};
+        syncEventCompletedMeta(event);
+        event.updatedAt = new Date().toISOString();
+        return true;
+      });
       saveWorkspace();
       renderAll();
-      showToast(`已清空 ${doneEvents.length} 项已完成事件。`, {
+      showToast(`已清空 ${doneOccurrences.length} 条完成记录。`, {
         icon: 'trash',
         action: {
           label: '撤销',
           onClick: () => {
             const targetTimeline = state.timelines.find((item) => item.id === timeline.id);
             if (!targetTimeline) return;
-            targetTimeline.events.push(...doneEvents);
+            targetTimeline.events = snapshot;
             saveWorkspace();
             renderAll();
             showToast('完成栏已恢复。', { icon: 'undo' });
